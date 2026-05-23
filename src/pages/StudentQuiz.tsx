@@ -43,6 +43,13 @@ export default function StudentQuiz() {
     };
     loadLeaderboard();
 
+    // Fetch latest session state initially to avoid being stuck if it changed while we were in another route
+    const loadInitialSession = async () => {
+      const { data } = await supabase.from('sessions').select('*').eq('id', session.id).single();
+      if (data) setSession(data);
+    };
+    loadInitialSession();
+
     // Subscribe to Session (Wait for Teacher to start)
     const sessionSub = supabase.channel('student_session')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${session.id}` }, (payload) => {

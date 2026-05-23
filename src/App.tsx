@@ -26,8 +26,8 @@ function GlobalListener() {
     const validateState = async () => {
       if (!participant || !session) return;
       
-      const { data: pData } = await supabase.from('participants').select('status').eq('id', participant.id).single();
-      const { data: sData } = await supabase.from('sessions').select('status').eq('id', session.id).single();
+      const { data: pData } = await supabase.from('participants').select('*').eq('id', participant.id).single();
+      const { data: sData } = await supabase.from('sessions').select('*').eq('id', session.id).single();
 
       if (!pData || pData.status === 'kicked' || !sData) {
         if (pData?.status === 'kicked') {
@@ -35,6 +35,10 @@ function GlobalListener() {
         }
         reset();
         navigate('/');
+      } else {
+        // Sync local state with fresh DB state
+        useStore.getState().setSession(sData);
+        useStore.getState().setParticipant(pData);
       }
     };
     
