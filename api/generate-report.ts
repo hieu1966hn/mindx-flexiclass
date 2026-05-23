@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     for (const p of participants) {
-      const goalCompletion = p.score || 0;
+      const goalCompletion = p.practice_eval?.completionPercentage || 0;
       const hintsUsed = p.hints_used || 0;
       let csStatus = 'Red';
       if (goalCompletion >= 80 && hintsUsed <= 3) csStatus = 'Green';
