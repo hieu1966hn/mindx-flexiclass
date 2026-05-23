@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { ChatSession, ChatMessage } from '../store/useStore';
+import type { ChatSession, ChatMessage } from '../store/useStore';
 
 // 1. Restore or Create Chat Session
 export const getOrCreateChatSession = async (

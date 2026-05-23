@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ACTIVITY_TEMPLATES, TemplateStatus } from '../lib/activityTemplates';
+import { ACTIVITY_TEMPLATES, type TemplateStatus } from '../lib/activityTemplates';
 import { supabase } from '../lib/supabase';
 import { useStore } from '../store/useStore';
 import { ArrowLeft, Loader2, Play } from 'lucide-react';
