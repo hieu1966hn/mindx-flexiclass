@@ -60,7 +60,7 @@ export const MOCK_QUESTIONS: Record<Grade, Question[]> = {
     {
       id: 'q7-1',
       topic: 'Số hữu tỉ và tỉ lệ thức',
-      questionText: 'Tìm x biết: x/4 = 3/2',
+      questionText: 'Tìm $x$ biết: $\\frac{x}{4} = \\frac{3}{2}$',
       options: ['6', '8', '12', '2'],
       correctAnswer: '6',
       hints: [
@@ -98,9 +98,9 @@ export const MOCK_QUESTIONS: Record<Grade, Question[]> = {
     {
       id: 'q8-1',
       topic: 'Hằng đẳng thức & Phân tích đa thức',
-      questionText: 'Khai triển: (x - 2)^2 = ?',
-      options: ['x^2 - 4', 'x^2 + 4', 'x^2 - 4x + 4', 'x^2 + 4x + 4'],
-      correctAnswer: 'x^2 - 4x + 4',
+      questionText: 'Khai triển: $(x - 2)^2 = ?$',
+      options: ['$x^2 - 4$', '$x^2 + 4$', '$x^2 - 4x + 4$', '$x^2 + 4x + 4$'],
+      correctAnswer: '$x^2 - 4x + 4$',
       hints: [
         'Sử dụng hằng đẳng thức: (a - b)^2.',
         'Công thức là: a^2 - 2ab + b^2.',
@@ -110,9 +110,9 @@ export const MOCK_QUESTIONS: Record<Grade, Question[]> = {
     {
       id: 'q8-2',
       topic: 'Hằng đẳng thức & Phân tích đa thức',
-      questionText: 'Phân tích đa thức thành nhân tử: x^2 - 9',
-      options: ['(x-3)(x-3)', '(x-3)(x+3)', '(x-9)(x+1)', 'x(x-9)'],
-      correctAnswer: '(x-3)(x+3)',
+      questionText: 'Phân tích đa thức thành nhân tử: $x^2 - 9$',
+      options: ['$(x-3)(x-3)$', '$(x-3)(x+3)$', '$(x-9)(x+1)$', '$x(x-9)$'],
+      correctAnswer: '$(x-3)(x+3)$',
       hints: [
         'Sử dụng hằng đẳng thức hiệu hai bình phương.',
         'Công thức: a^2 - b^2 = (a-b)(a+b).',
@@ -122,7 +122,7 @@ export const MOCK_QUESTIONS: Record<Grade, Question[]> = {
     {
       id: 'q8-3',
       topic: 'Hằng đẳng thức & Phân tích đa thức',
-      questionText: 'Tính nhanh: 101^2 - 1^2 = ?',
+      questionText: 'Tính nhanh: $101^2 - 1^2 = ?$',
       options: ['10000', '10200', '100', '10201'],
       correctAnswer: '10200',
       hints: [
@@ -180,6 +180,7 @@ export function calculateNormalizedScore(
   streak: number
 ): { rawScore: number, normalizedScore: number } {
   const correctPoints = isCorrect ? 100 : 0;
+  
   const speedBonus = isCorrect ? Math.max(0, 30 - Math.floor(timeSpentSec / 5)) : 0;
   const streakBonus = isCorrect ? streak * 5 : 0;
   const hintPenalty = hintsUsed * 8;
@@ -190,3 +191,12 @@ export function calculateNormalizedScore(
   
   return { rawScore, normalizedScore };
 }
+
+// Tug of War Scoring
+// Team pulling power: Correct answer adds power. Hints reduce power.
+export const tugOfWarScoring = (isCorrect: boolean, hintsUsed: number) => {
+  if (!isCorrect) return 0; // Wrong answers don't pull
+  const basePull = 10;
+  const hintPenalty = hintsUsed * 3;
+  return Math.max(1, basePull - hintPenalty); // Minimum pull is 1 for correct answer
+};

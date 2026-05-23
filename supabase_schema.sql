@@ -7,6 +7,7 @@ CREATE TABLE public.sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL CHECK (status IN ('waiting', 'active', 'ended')),
+  template_id TEXT NOT NULL DEFAULT 'speed-challenge',
   started_at TIMESTAMPTZ,
   duration_minutes INTEGER NOT NULL DEFAULT 8,
   host_token TEXT NOT NULL,
@@ -20,11 +21,16 @@ CREATE TABLE public.participants (
   name TEXT NOT NULL,
   student_code TEXT NOT NULL,
   grade INTEGER NOT NULL,
+  team TEXT,
   score INTEGER DEFAULT 0,
   raw_score INTEGER DEFAULT 0,
   hints_used INTEGER DEFAULT 0,
   answers JSONB DEFAULT '[]'::jsonb,
-  status TEXT NOT NULL DEFAULT 'joined' CHECK (status IN ('joined', 'playing', 'completed', 'stuck')),
+  goal_data JSONB,
+  study_path JSONB,
+  practice_eval JSONB,
+  teacher_note TEXT,
+  status TEXT NOT NULL DEFAULT 'joined' CHECK (status IN ('joined', 'goal_intake', 'self_study', 'goal_practice', 'playing', 'completed', 'stuck')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

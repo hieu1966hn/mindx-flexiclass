@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { supabase } from '../lib/supabase';
-import { Users, Play, Square, Award } from 'lucide-react';
+import { Users, Play, Square, Award, Edit3, Check } from 'lucide-react';
+import { lockAllSessionsInBatch } from '../lib/chatService';
 
 export default function TeacherDashboard() {
   const navigate = useNavigate();
@@ -78,26 +79,87 @@ export default function TeacherDashboard() {
 
   const handleEndSession = async () => {
     if (!session) return;
-    if (!confirm('Bạn có chắc chắn muốn kết thúc phiên học này không?')) return;
+    if (!confirm('Bạn có chắc chắn muốn kết thúc phiên học này không? Hệ thống sẽ tạo Báo cáo CS (Snapshot) và không thể hoàn tác.')) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // 1. Lock sessions
+      await lockAllSessionsInBatch(session.id);
+      
+      // 2. Change status to ending locally (optional visual feedback)
+      await supabase.from('sessions').update({ status: 'ending' }).eq('id', session.id);
+      
+      // 3. Generate CS Report
+      const res = await fetch('/api/generate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          hostToken: hostToken,
+          aiMode: import.meta.env.VITE_AI_MODE || 'mock'
+        })
+      });
+      
+      if (!res.ok) {
+        console.error("Failed to generate report:", await res.text());
+        alert("Có lỗi khi tạo báo cáo, nhưng phiên học đã được kết thúc.");
+      }
+      
+      // 4. Refresh session state
+      const { data } = await supabase
         .from('sessions')
-        .update({ status: 'ended' })
-        .eq('id', session.id)
-        .eq('host_token', hostToken)
         .select()
+        .eq('id', session.id)
         .single();
-      if (error) throw error;
-      setSession(data);
+        
+      if (data) setSession(data);
     } catch (err) {
       console.error(err);
+      alert('Lỗi khi kết thúc phiên học.');
     } finally {
       setLoading(false);
     }
   };
 
   if (!session) return null;
+
+  const handleUpdateTeacherNote = async (participantId: string, note: string) => {
+    try {
+      await supabase
+        .from('participants')
+        .update({ teacher_note: note })
+        .eq('id', participantId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleKickParticipant = async (participantId: string, name: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn mời học sinh ${name} ra khỏi phiên không?`)) return;
+    try {
+      const now = new Date().toISOString();
+      await supabase.from('participants').update({ 
+        status: 'kicked', 
+        kicked_at: now,
+        kicked_reason: 'Kicked by teacher'
+      }).eq('id', participantId);
+      
+      await supabase.from('chat_sessions').update({ 
+        status: 'locked',
+        locked_at: now
+      }).eq('participant_id', participantId);
+      
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi khi mời học sinh ra khỏi phiên.');
+    }
+  };
+
+  const completedCount = participants.filter(p => p.status === 'completed').length;
+  const isTugOfWar = session.template_id === 'tug-of-war';
+  const blueScore = participants.filter(p => p.team === 'blue').reduce((sum, p) => sum + (p.score || 0), 0);
+  const redScore = participants.filter(p => p.team === 'red').reduce((sum, p) => sum + (p.score || 0), 0);
+  const totalScore = blueScore + redScore || 1;
+  const bluePercentage = (blueScore / totalScore) * 100;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
@@ -113,18 +175,26 @@ export default function TeacherDashboard() {
         
         <div className="mt-6 md:mt-0 flex gap-4">
           {session.status === 'ended' && (
-            <button 
-              onClick={() => {
-                useStore.getState().setSession(null);
-                useStore.getState().setHostToken(null);
-                useStore.getState().setRole(null);
-                useStore.getState().setParticipants([]);
-                navigate('/');
-              }}
-              className="flex items-center gap-2 rounded-full bg-mx-primary px-6 py-3 font-semibold text-white hover:bg-mx-primary-dark transition-colors"
-            >
-              Tạo phòng mới
-            </button>
+            <>
+              <button 
+                onClick={() => navigate('/cs-report')}
+                className="flex items-center gap-2 rounded-full bg-mx-secondary px-6 py-3 font-semibold text-white hover:bg-mx-secondary-dark transition-colors"
+              >
+                Xem Báo Cáo CS
+              </button>
+              <button 
+                onClick={() => {
+                  useStore.getState().setSession(null);
+                  useStore.getState().setHostToken(null);
+                  useStore.getState().setRole(null);
+                  useStore.getState().setParticipants([]);
+                  navigate('/');
+                }}
+                className="flex items-center gap-2 rounded-full bg-mx-primary px-6 py-3 font-semibold text-white hover:bg-mx-primary-dark transition-colors"
+              >
+                Tạo phòng mới
+              </button>
+            </>
           )}
           {session.status === 'waiting' && (
             <button 
@@ -165,12 +235,33 @@ export default function TeacherDashboard() {
         </div>
         <div className="bg-mx-surface rounded-2xl p-6 shadow-sm border border-mx-border">
           <h3 className="text-mx-text-muted text-sm font-semibold mb-1">Đã hoàn thành</h3>
-          <p className="text-2xl font-bold text-mx-success">{participants.filter(p => p.status === 'completed').length}</p>
+          <p className="text-2xl font-bold text-mx-success">{completedCount}</p>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="grid md:grid-cols-3 gap-8">
+        {/* Tug of War Dashboard */}
+        {isTugOfWar && (
+          <div className="md:col-span-3 bg-mx-surface rounded-3xl shadow-card border border-mx-border p-6 mb-2">
+            <h3 className="text-xl font-bold mb-4 text-center">Kéo Co Tri Thức (Tug of War)</h3>
+            <div className="flex justify-between mb-2 text-sm font-bold">
+              <span className="text-blue-600">Đội Xanh: {blueScore}</span>
+              <span className="text-red-600">Đội Đỏ: {redScore}</span>
+            </div>
+            <div className="w-full h-8 bg-gray-200 rounded-full overflow-hidden flex relative">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-500" 
+                style={{ width: `${totalScore === 1 && blueScore === 0 ? 50 : bluePercentage}%` }}
+              ></div>
+              <div 
+                className="h-full bg-red-500 transition-all duration-500 flex-1"
+              ></div>
+              <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-white -ml-0.5 z-10"></div>
+            </div>
+          </div>
+        )}
+
         {/* Participant List */}
         <div className="md:col-span-2 bg-mx-surface rounded-3xl p-6 shadow-card border border-mx-border min-h-[400px]">
           <h2 className="text-xl font-bold mb-6">Danh sách Lớp</h2>
@@ -187,9 +278,12 @@ export default function TeacherDashboard() {
                     <th className="pb-3 font-medium">Học sinh</th>
                     <th className="pb-3 font-medium">Mã</th>
                     <th className="pb-3 font-medium">Lớp</th>
+                    {isTugOfWar && <th className="pb-3 font-medium">Đội</th>}
                     <th className="pb-3 font-medium">Trạng thái</th>
+                    <th className="pb-3 font-medium">Ghi chú hỗ trợ</th>
                     <th className="pb-3 font-medium">Hint dùng</th>
                     <th className="pb-3 font-medium text-right">Raw Score</th>
+                    <th className="pb-3 font-medium text-center">Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -198,14 +292,46 @@ export default function TeacherDashboard() {
                       <td className="py-4 font-medium">{p.name}</td>
                       <td className="py-4 text-sm text-mx-text-muted font-mono">{p.student_code}</td>
                       <td className="py-4"><span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-md">Lớp {p.grade}</span></td>
+                      {isTugOfWar && (
+                        <td className="py-4">
+                          {p.team === 'blue' ? (
+                            <span className="bg-blue-100 text-blue-700 font-bold px-2 py-1 rounded-full text-xs">Xanh</span>
+                          ) : p.team === 'red' ? (
+                            <span className="bg-red-100 text-red-700 font-bold px-2 py-1 rounded-full text-xs">Đỏ</span>
+                          ) : '-'}
+                        </td>
+                      )}
                       <td className="py-4">
-                        {p.status === 'joined' && <span className="text-gray-500">Đang chờ</span>}
-                        {p.status === 'playing' && <span className="text-mx-warning">Đang làm</span>}
+                        {p.status === 'goal_intake' && <span className="text-gray-500">Mục tiêu</span>}
+                        {p.status === 'self_study' && <span className="text-blue-500">Tự học</span>}
+                        {p.status === 'goal_practice' && <span className="text-amber-500">Làm bài</span>}
+                        {p.status === 'playing' && <span className="text-mx-warning">Cạnh tranh</span>}
                         {p.status === 'completed' && <span className="text-mx-success">Hoàn thành</span>}
                         {p.status === 'stuck' && <span className="text-mx-danger font-bold">Đang kẹt</span>}
+                        {p.status === 'joined' && <span className="text-gray-500">Đang chờ</span>}
+                        {p.status === 'kicked' && <span className="text-red-500 font-bold">Bị mời ra</span>}
+                      </td>
+                      <td className="py-4">
+                         <input 
+                           type="text" 
+                           defaultValue={p.teacher_note || ''} 
+                           disabled={session.status === 'ended'}
+                           onBlur={(e) => handleUpdateTeacherNote(p.id, e.target.value)}
+                           placeholder="Ghi chú..."
+                           className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm w-full max-w-[150px]"
+                         />
                       </td>
                       <td className="py-4">{p.hints_used}</td>
                       <td className="py-4 text-right font-mono">{p.raw_score}</td>
+                      <td className="py-4 text-center">
+                        <button
+                          onClick={() => handleKickParticipant(p.id, p.name)}
+                          disabled={session.status === 'ended' || p.status === 'completed' || p.status === 'kicked'}
+                          className="text-mx-danger hover:bg-red-50 p-2 rounded-md font-medium text-sm transition-colors disabled:opacity-50"
+                        >
+                          Mời ra khỏi phiên
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

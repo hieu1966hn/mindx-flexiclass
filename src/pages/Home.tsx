@@ -8,39 +8,9 @@ export default function Home() {
   const setRole = useStore((state) => state.setRole);
   const setSession = useStore((state) => state.setSession);
   const setHostToken = useStore((state) => state.setHostToken);
-  const [loading, setLoading] = useState(false);
 
-  const handleCreateSession = async () => {
-    setLoading(true);
-    try {
-      const roomCode = 'MATH-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-      const hostToken = 'HOST-' + Math.random().toString(36).substring(2, 10);
-      
-      const { data, error } = await supabase
-        .from('sessions')
-        .insert([
-          { 
-            code: roomCode, 
-            status: 'waiting', 
-            host_token: hostToken,
-            duration_minutes: 8
-          }
-        ])
-        .select()
-        .single();
-        
-      if (error) throw error;
-      
-      setRole('teacher');
-      setSession(data);
-      setHostToken(hostToken);
-      navigate('/teacher/dashboard');
-    } catch (err) {
-      console.error(err);
-      alert('Không thể tạo phòng. Xem console log.');
-    } finally {
-      setLoading(false);
-    }
+  const handleCreateRoom = () => {
+    navigate('/templates');
   };
 
   return (
@@ -60,11 +30,10 @@ export default function Home() {
             Tạo phòng học chung, quản lý và theo dõi tiến độ của học sinh theo thời gian thực.
           </p>
           <button 
-            onClick={handleCreateSession}
-            disabled={loading}
-            className="w-full rounded-full bg-mx-primary px-6 py-3 font-semibold text-white shadow-md hover:bg-mx-primary-dark transition-colors disabled:opacity-50"
+            onClick={handleCreateRoom}
+            className="w-full rounded-full bg-mx-primary px-6 py-3 font-semibold text-white shadow-md hover:bg-mx-primary-dark transition-colors"
           >
-            {loading ? 'Đang tạo...' : 'Tạo phòng học mới'}
+            Tạo phòng học mới
           </button>
         </div>
 

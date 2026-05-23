@@ -2,8 +2,11 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { supabase } from '../lib/supabase';
-import { MOCK_QUESTIONS, calculateNormalizedScore, DEMO_PROFILES } from '../lib/mockData';
+import { MOCK_QUESTIONS, calculateNormalizedScore, tugOfWarScoring, DEMO_PROFILES } from '../lib/mockData';
 import { Clock, HelpCircle, Trophy } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 export default function StudentQuiz() {
   const navigate = useNavigate();
@@ -119,7 +122,18 @@ export default function StudentQuiz() {
     const newStreak = isCorrect ? localStreak + 1 : 0;
     setLocalStreak(newStreak);
 
-    const { rawScore, normalizedScore } = calculateNormalizedScore(isCorrect, timeSpent, hintsRevealed, newStreak);
+    let rawScoreAdd = 0;
+    let normalizedScoreAdd = 0;
+
+    if (session?.template_id === 'tug-of-war') {
+      const pull = tugOfWarScoring(isCorrect, hintsRevealed);
+      rawScoreAdd = pull;
+      normalizedScoreAdd = pull; 
+    } else {
+      const res = calculateNormalizedScore(isCorrect, timeSpent, hintsRevealed, newStreak);
+      rawScoreAdd = res.rawScore;
+      normalizedScoreAdd = res.normalizedScore;
+    }
 
     const newAnswers = [...(participant.answers || []), {
       questionId: currentQ.id,
@@ -127,8 +141,8 @@ export default function StudentQuiz() {
       isCorrect
     }];
 
-    const newRaw = (participant!.raw_score || 0) + rawScore;
-    const newScore = (participant!.score || 0) + normalizedScore;
+    const newRaw = (participant!.raw_score || 0) + rawScoreAdd;
+    const newScore = (participant!.score || 0) + normalizedScoreAdd;
 
     // Update DB
     const { data } = await supabase.from('participants').update({
@@ -183,16 +197,10 @@ export default function StudentQuiz() {
             <p className="text-5xl font-mono font-bold text-mx-primary">{participant.score}</p>
           </div>
           <button 
-            onClick={() => {
-              useStore.getState().setSession(null);
-              useStore.getState().setParticipant(null);
-              useStore.getState().setRole(null);
-              useStore.getState().setParticipants([]);
-              navigate('/');
-            }}
+            onClick={() => navigate('/report')}
             className="w-full sm:w-auto bg-mx-primary text-white px-8 py-3 rounded-full font-bold shadow-md hover:bg-mx-primary-dark transition-colors"
           >
-            Quay về Trang chủ
+            Xem Báo Cáo Học Tập
           </button>
         </div>
         
@@ -239,6 +247,12 @@ export default function StudentQuiz() {
     return `${m}:${s}`;
   };
 
+  const isTugOfWar = session?.template_id === 'tug-of-war';
+  const blueScore = participants.filter(p => p.team === 'blue').reduce((sum, p) => sum + p.score, 0);
+  const redScore = participants.filter(p => p.team === 'red').reduce((sum, p) => sum + p.score, 0);
+  const totalScore = blueScore + redScore || 1;
+  const bluePercentage = (blueScore / totalScore) * 100;
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Top Bar */}
@@ -258,10 +272,29 @@ export default function StudentQuiz() {
         </div>
       </div>
 
+      {/* Tug of War Progress Bar */}
+      {isTugOfWar && (
+        <div className="bg-mx-surface rounded-2xl p-4 shadow-sm border border-mx-border mb-6">
+          <div className="flex justify-between mb-2 text-xs font-bold uppercase tracking-wider">
+            <span className="text-blue-600">Đội Xanh: {blueScore}</span>
+            <span className="text-red-600">Đội Đỏ: {redScore}</span>
+          </div>
+          <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden flex relative">
+            <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${totalScore === 1 && blueScore === 0 ? 50 : bluePercentage}%` }}></div>
+            <div className="h-full bg-red-500 transition-all duration-500 flex-1"></div>
+            <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white -ml-px z-10"></div>
+          </div>
+        </div>
+      )}
+
       {/* Question Card */}
       {currentQ && (
         <div className="bg-mx-surface rounded-3xl p-8 shadow-card border border-mx-border mb-6">
-          <h2 className="text-2xl font-bold mb-8 leading-snug">{currentQ.questionText}</h2>
+          <div className="text-2xl font-bold mb-8 leading-snug prose prose-lg max-w-none">
+             <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+               {currentQ.questionText}
+             </ReactMarkdown>
+          </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {currentQ.options.map((opt, idx) => (
@@ -274,7 +307,9 @@ export default function StudentQuiz() {
                   : 'border-mx-border hover:border-mx-primary/50 hover:bg-gray-50'
                 }`}
               >
-                {opt}
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                   {opt}
+                </ReactMarkdown>
               </button>
             ))}
           </div>

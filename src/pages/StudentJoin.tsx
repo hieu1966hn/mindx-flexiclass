@@ -55,6 +55,15 @@ export default function StudentJoin() {
       const grade = DEMO_PROFILES[studentCode].grade;
 
       // 2. Create participant record
+      let team = undefined;
+      if (sessionData.template_id === 'tug-of-war') {
+         const { count } = await supabase
+           .from('participants')
+           .select('*', { count: 'exact', head: true })
+           .eq('session_id', sessionData.id);
+         team = (count || 0) % 2 === 0 ? 'blue' : 'red';
+      }
+
       const { data: participantData, error: participantError } = await supabase
         .from('participants')
         .insert([
@@ -63,7 +72,8 @@ export default function StudentJoin() {
             name: displayName.trim() || 'Học viên ẩn danh',
             student_code: studentCode,
             grade: grade,
-            status: 'joined'
+            team: team,
+            status: 'goal_intake'
           }
         ])
         .select()
@@ -76,8 +86,8 @@ export default function StudentJoin() {
       setSession(sessionData);
       setParticipant(participantData);
       
-      // Navigate to Quiz/Waiting Room
-      navigate('/quiz');
+      // Navigate to Goal Intake
+      navigate('/intake');
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || 'Lỗi khi tham gia phòng học.');
